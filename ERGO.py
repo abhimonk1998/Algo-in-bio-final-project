@@ -81,7 +81,7 @@ def main(args):
 
     params['lr'] = 1e-4
     params['wd'] = 0
-    params['epochs'] = 2      # Increase the number of epochs for better performance
+    params['epochs'] = 100      # Increase the number of epochs for better performance
     params['lstm_dim'] = 256   # You can tune this
     params['emb_dim'] = 20     # Tune embedding dimension
     params['dropout'] = 0.2    # Tune dropout
