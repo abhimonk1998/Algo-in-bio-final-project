@@ -1,0 +1,20 @@
+# Byte-compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Model files
+
+# Environment files
+.env
+
+# Data folders
+
+# Figures or generated plots
+
+# Logs and temporary files
+
+# Ignore your specific `ignore` directory
+ignore/
+
+# Others (you can specify any additional files or directories)

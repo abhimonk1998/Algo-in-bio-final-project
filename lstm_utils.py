@@ -6,7 +6,8 @@ import time
 import numpy as np
 import torch.autograd as autograd
 from ERGO_models import DoubleLSTMClassifier
-from sklearn.metrics import roc_auc_score, roc_curve
+from sklearn.metrics import roc_auc_score, roc_curve, accuracy_score, precision_score, recall_score, f1_score
+
 
 
 def get_lists_from_pairs(pairs):
@@ -132,6 +133,8 @@ def train_epoch(batches, model, loss_function, optimizer, device):
         probs = model(padded_tcrs, tcr_lens, padded_peps, pep_lens)
         # print(probs, batch_signs)
         # Compute loss
+        probs = probs.squeeze(1)
+        batch_signs = batch_signs.float()
         weights = batch_signs * 0.84 + (1-batch_signs) * 0.14
         loss_function.weight = weights
         loss = loss_function(probs, batch_signs)
@@ -148,57 +151,85 @@ def train_epoch(batches, model, loss_function, optimizer, device):
 
 
 def train_model(batches, test_batches, device, args, params):
-    """
-    Train and evaluate the model
-    """
     losses = []
-    # We use Cross-Entropy loss
+    # Loss function
     loss_function = nn.BCELoss()
-    # Set model with relevant parameters
+
     if args['siamese'] is True:
         model = SiameseLSTMClassifier(params['emb_dim'], params['lstm_dim'], device)
     else:
-        model = DoubleLSTMClassifier(params['emb_dim'], params['lstm_dim'], params['dropout'], device)
-    # Move to GPU
+        model = DoubleLSTMClassifier(
+            params['emb_dim'], 
+            params['lstm_dim'], 
+            params['dropout'], 
+            device, 
+            num_layers=params.get('num_layers', 2), 
+            bidirectional=params.get('bidirectional', False)
+        )
+
+    # Move to GPU if available
     model.to(device)
-    # We use Adam optimizer
     optimizer = optim.Adam(model.parameters(), lr=params['lr'], weight_decay=params['wd'])
-    # Train several epochs
+
     best_auc = 0
     best_roc = None
+
     for epoch in range(params['epochs']):
         print('epoch:', epoch + 1)
         epoch_time = time.time()
         # Train model and get loss
         loss = train_epoch(batches, model, loss_function, optimizer, device)
         losses.append(loss)
-        # Compute auc
-        train_auc = evaluate(model, batches, device)[0]
-        print('train auc:', train_auc)
+
+        # Evaluate on training set
+        train_auc, train_roc, train_acc, train_precision, train_recall, train_f1 = evaluate(model, batches, device)
+        print('Train AUC:', train_auc)
+        print('Train Accuracy:', train_acc)
+        print('Train Precision:', train_precision)
+        print('Train Recall:', train_recall)
+        print('Train F1:', train_f1)
+
         with open(args['train_auc_file'], 'a+') as file:
             file.write(str(train_auc) + '\n')
+
+        # Evaluate on test set
         if params['option'] == 2:
+            # If your code uses test_w, test_c for something else, you can adapt similarly
             test_w, test_c = test_batches
-            test_auc_w = evaluate(model, test_w, device)
-            print('test auc w:', test_auc_w)
+            test_auc_w, _, test_acc_w, test_precision_w, test_recall_w, test_f1_w = evaluate(model, test_w, device)
+            print('Test AUC (W):', test_auc_w)
+            print('Test Accuracy (W):', test_acc_w)
+            print('Test Precision (W):', test_precision_w)
+            print('Test Recall (W):', test_recall_w)
+            print('Test F1 (W):', test_f1_w)
             with open(args['test_auc_file_w'], 'a+') as file:
                 file.write(str(test_auc_w) + '\n')
-            test_auc_c = evaluate(model, test_c, device)
-            print('test auc c:', test_auc_c)
+
+            test_auc_c, _, test_acc_c, test_precision_c, test_recall_c, test_f1_c = evaluate(model, test_c, device)
+            print('Test AUC (C):', test_auc_c)
+            print('Test Accuracy (C):', test_acc_c)
+            print('Test Precision (C):', test_precision_c)
+            print('Test Recall (C):', test_recall_c)
+            print('Test F1 (C):', test_f1_c)
             with open(args['test_auc_file_c'], 'a+') as file:
                 file.write(str(test_auc_c) + '\n')
         else:
-            test_auc, roc = evaluate(model, test_batches, device)
-
-            # nni.report_intermediate_result(test_auc)
-
+            test_auc, test_roc, test_acc, test_precision, test_recall, test_f1 = evaluate(model, test_batches, device)
             if test_auc > best_auc:
                 best_auc = test_auc
-                best_roc = roc
-            print('test auc:', test_auc)
+                best_roc = test_roc
+
+            print('Test AUC:', test_auc)
+            print('Test Accuracy:', test_acc)
+            print('Test Precision:', test_precision)
+            print('Test Recall:', test_recall)
+            print('Test F1:', test_f1)
+
             with open(args['test_auc_file'], 'a+') as file:
                 file.write(str(test_auc) + '\n')
+
         print('one epoch time:', time.time() - epoch_time)
+
     return model, best_auc, best_roc
 
 
@@ -215,14 +246,23 @@ def evaluate(model, batches, device):
         padded_peps = padded_peps.to(device)
         pep_lens = pep_lens.to(device)
         probs = model(padded_tcrs, tcr_lens, padded_peps, pep_lens)
-        # print(np.array(batch_signs).astype(int))
-        # print(probs.cpu().data.numpy())
         true.extend(np.array(batch_signs).astype(int))
         scores.extend(probs.cpu().data.numpy())
-    # Return auc score
+
+    # Calculate AUC
     auc = roc_auc_score(true, scores)
     fpr, tpr, thresholds = roc_curve(true, scores)
-    return auc, (fpr, tpr, thresholds)
+
+    # Convert probabilities to binary predictions for other metrics
+    pred_labels = [1 if s >= 0.5 else 0 for s in scores]
+
+    # Compute additional metrics
+    acc = accuracy_score(true, pred_labels)
+    precision = precision_score(true, pred_labels, zero_division=0)
+    recall = recall_score(true, pred_labels, zero_division=0)
+    f1 = f1_score(true, pred_labels, zero_division=0)
+
+    return auc, (fpr, tpr, thresholds), acc, precision, recall, f1
 
 
 def evaluate_full(model, batches, device):

@@ -66,18 +66,28 @@ def main(args):
         pass
     arg['siamese'] = False
     params = {}
-    params['lr'] = 1e-4
-    params['wd'] = 0
-    params['epochs'] = 100
+    # params['lr'] = 1e-4
+    # params['wd'] = 0
+    # params['epochs'] = 2
     if args.dataset == 'tumor':
         params['epochs'] = 25
     params['batch_size'] = 50
-    params['lstm_dim'] = 500
-    params['emb_dim'] = 10
-    params['dropout'] = 0.1
+    # params['lstm_dim'] = 500
+    # params['emb_dim'] = 10
+    # params['dropout'] = 0.1
     params['option'] = 0
     params['enc_dim'] = 100
     params['train_ae'] = True
+
+    params['lr'] = 1e-4
+    params['wd'] = 0
+    params['epochs'] = 2      # Increase the number of epochs for better performance
+    params['lstm_dim'] = 256   # You can tune this
+    params['emb_dim'] = 20     # Tune embedding dimension
+    params['dropout'] = 0.2    # Tune dropout
+    params['bidirectional'] = True  # Enable bidirectional LSTM
+    params['num_layers'] = 2   # Keep 2 layers, or tune if desired
+
 
     # Load autoencoder params
     if args.model_type == 'ae':
