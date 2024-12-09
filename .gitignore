@@ -4,12 +4,12 @@ __pycache__/
 *.pyo
 
 # Model files
-
+*.pt
 # Environment files
 .env
 
 # Data folders
-
+util_env/
 # Figures or generated plots
 
 # Logs and temporary files
